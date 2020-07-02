@@ -27,17 +27,49 @@
 
 CHIP CPU {
 
-    IN  inM[16],         // M value input  (M = contents of RAM[A])
-        instruction[16], // Instruction for execution
-        reset;           // Signals whether to re-start the current
-                         // program (reset==1) or continue executing
-                         // the current program (reset==0).
+    IN  inM[16],            // M value input  (M = contents of RAM[A])
+        instruction[16],    // Instruction for execution
+        reset;              // Signals whether to re-start the current
+                            // program (reset==1) or continue executing
+                            // the current program (reset==0).
 
-    OUT outM[16],        // M value output
-        writeM,          // Write to M? 
-        addressM[15],    // Address in data memory (of M)
-        pc[15];          // address of next instruction
+    OUT outM[16],           // M value output
+        writeM,             // Write to M? 
+        addressM[15],       // Address in data memory (of M)
+        pc[15];             // address of next instruction
 
     PARTS:
-    // Put your code here:
+    Not(in = instruction[15], out = ACmd);
+    Not(in = ACmd, out = CCmd);
+
+    //Mux Selectors
+    Mux16(a = instruction, b = ALUout, sel = instruction[15], out = addresscode);
+    Mux16(a = Aout, b = inM, sel = instruction[12], out = AOutALU);
+
+    // D-Register
+    And(a = instruction[4], b = CCmd, out = loadD);
+    DRegister(in = ALUout, load = loadD, out = Dout);
+
+    // A-Register
+    Or(a = ACmd, b = instruction[5], out = addressload);
+    ARegister(in = addresscode, load = addressload, out = Aout, out[0..14] = addressM);
+
+    // ALU Calculations
+    ALU(x = Dout, y = AOutALU, zx = instruction[11], nx = instruction[10], zy = instruction[9], ny = instruction[8], f = instruction[7], no = instruction[6], out = ALUout, zr = outzero, ng = negout, out = outM);
+
+    //Memory output
+    And(a = instruction[3], b = CCmd, out = writeM);
+    
+    // Jump Calculations
+    Or(a = negout, b = outzero, out = negzero);
+    Not(in = negzero, out = posout);
+    And(a = instruction[1], b = outzero, out = zero);
+    And(a = instruction[2], b = negout, out = neg);
+    And(a = instruction[0], b = posout, out = pos);
+    Or(a = pos, b = zero, out = cmp1);
+    Or(a = cmp1, b = neg, out = jump);
+    And(a = jump, b = CCmd, out = jumpcmd);
+
+    // PC
+    PC(in = Aout, load = jumpcmd, inc = true, reset = reset, out[0..14] = pc);
 }
